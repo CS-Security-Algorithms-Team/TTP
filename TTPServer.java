@@ -8,9 +8,9 @@ import java.io.*;
 
 public class TTPServer implements Runnable {
    Socket sock= null;
-   String userId;
+   String username;
+   String password;
    String providerId;
-   String USERTOKEN_QUERY = "SELECT userKey FROM userKeys WHERE userId = "+userId+" AND providerId = "+providerId;
    String user;
    String pass;
 
@@ -24,15 +24,41 @@ public class TTPServer implements Runnable {
       try {
          BufferedReader in = new BufferedReader(new InputStreamReader(sock.getInputStream()));
          String request = in.readLine();
+		 if(request == null) {
+			sock.getOutputStream().write("Authentication failed, must provide username, password, providerId".getBytes());
+			return;
+		 }
          System.out.println(request);
-         String query = makeQuery(request);
-         System.out.println(query);
-
-         Class.forName("com.mysql.jdbc.Driver").newInstance();
+         String query = makePasswordQuery(request);
+		 if(query.equals("")) {
+			sock.getOutputStream().write("Authentication failed, must provide username, password, providerId".getBytes());
+		 }
+		 System.out.println(query);
+		 
+		 Class.forName("com.mysql.jdbc.Driver").newInstance();
           Connection con = DriverManager.getConnection("jdbc:mysql://cs.okstate.edu:3306/"+user, user, pass);
+		  
+		 ResultSet rs = con.createStatement().executeQuery(query);
+		 if(rs.next()==false) {
+			sock.getOutputStream().write("Authentication failed, cannot get user".getBytes());
+			return;
+		 }
+         String dbPassword = rs.getString("password");
+         String userId = rs.getString("id");
+		 
+		 if(password.equals(dbPassword)) {
+			query = makeTokenQuery(userId);
+			System.out.println(query);
+		 } else {
+		    sock.getOutputStream().write("Authentication failed, bad password".getBytes());
+			return;
+		 }
 
-         ResultSet rs = con.createStatement().executeQuery(query);
-         rs.next();
+         rs = con.createStatement().executeQuery(query);
+         if(rs.next()==false) {
+			sock.getOutputStream().write("Authentication failed, bad provider id".getBytes());
+			return;
+		 }
          String _userKey = rs.getString("userKey");
          System.out.println(userId + "\t" + providerId + "\t" + _userKey);
 
@@ -51,14 +77,23 @@ public class TTPServer implements Runnable {
       }
    }
 
-   private String makeQuery(String request) {
+   private String makePasswordQuery(String request) {
       String[] fields = request.split(",");
-      userId = fields[0];
-      providerId = fields[1];
-      USERTOKEN_QUERY = "SELECT userKey FROM userKeys WHERE userId = "+userId+" AND providerId = "+providerId;
-      return USERTOKEN_QUERY;
+	  if(fields ==null || fields.length!=3) {
+		return "";
+	  }
+      username = fields[0];
+	  password = fields[1];
+      providerId = fields[2];
+      String query = "SELECT password, id FROM userData WHERE username = '"+username+"'";
+      return query;
    }
-
+   
+    private String makeTokenQuery(String userId) {
+      String query = "SELECT userKey FROM userKeys WHERE userId = "+userId+" AND providerId = "+providerId;
+      return query;
+   }
+   
    public static void main(String[] args) {
       ServerSocket ss = null;
 

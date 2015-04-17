@@ -12,7 +12,7 @@ public class TTPClient {
          Socket sock = new Socket("localhost", 8080);
 
          PrintWriter out = new PrintWriter(sock.getOutputStream());
-         out.println(args[0]+","+args[1]);
+         out.println(args[0]+","+args[1]+","+args[2]);
          out.flush();
          BufferedReader in = new BufferedReader(new InputStreamReader(sock.getInputStream()));
 
@@ -24,7 +24,7 @@ public class TTPClient {
       } catch (IOException e) {
          e.printStackTrace();
       } catch (NullPointerException | ArrayIndexOutOfBoundsException e) {
-         System.out.println("java TTPClient <userId> <providerId>");
+         System.out.println("java TTPClient <username> <password> <providerId>");
       }
 
 
