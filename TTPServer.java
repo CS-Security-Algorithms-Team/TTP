@@ -1,8 +1,5 @@
 import java.net.*;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.ResultSet;
-import java.sql.SQLException;
+import java.sql.*;
 import java.io.*;
 
 
@@ -10,7 +7,7 @@ public class TTPServer implements Runnable {
    Socket sock= null;
    String username;
    String password;
-   String providerId;
+   int providerId;
    String user;
    String pass;
 
@@ -29,32 +26,33 @@ public class TTPServer implements Runnable {
 			return;
 		 }
          System.out.println(request);
-         String query = makePasswordQuery(request);
-		 if(query.equals("")) {
+		 
+		  Class.forName("com.mysql.jdbc.Driver").newInstance();
+          Connection con = DriverManager.getConnection("jdbc:mysql://cs.okstate.edu:3306/"+user, user, pass);
+		 
+		 PreparedStatement query = makePasswordQuery(request, con);
+		 if(query==null) {
 			sock.getOutputStream().write("Authentication failed, must provide username, password, providerId".getBytes());
 		 }
 		 System.out.println(query);
 		 
-		 Class.forName("com.mysql.jdbc.Driver").newInstance();
-          Connection con = DriverManager.getConnection("jdbc:mysql://cs.okstate.edu:3306/"+user, user, pass);
-		  
-		 ResultSet rs = con.createStatement().executeQuery(query);
+		 ResultSet rs = query.executeQuery();
 		 if(rs.next()==false) {
 			sock.getOutputStream().write("Authentication failed, cannot get user".getBytes());
 			return;
 		 }
          String dbPassword = rs.getString("password");
-         String userId = rs.getString("id");
+         int userId = rs.getInt("id");
 		 
 		 if(password.equals(dbPassword)) {
-			query = makeTokenQuery(userId);
+			query = makeTokenQuery(userId, con);
 			System.out.println(query);
 		 } else {
 		    sock.getOutputStream().write("Authentication failed, bad password".getBytes());
 			return;
 		 }
 
-         rs = con.createStatement().executeQuery(query);
+         rs = query.executeQuery();
          if(rs.next()==false) {
 			sock.getOutputStream().write("Authentication failed, bad provider id".getBytes());
 			return;
@@ -77,21 +75,29 @@ public class TTPServer implements Runnable {
       }
    }
 
-   private String makePasswordQuery(String request) {
+   private PreparedStatement makePasswordQuery(String request, Connection con) throws SQLException {
       String[] fields = request.split(",");
 	  if(fields ==null || fields.length!=3) {
-		return "";
+		return null;
 	  }
       username = fields[0];
 	  password = fields[1];
-      providerId = fields[2];
-      String query = "SELECT password, id FROM userData WHERE username = '"+username+"'";
-      return query;
+	  try {
+		providerId = Integer.parseInt(fields[2]);
+	  } catch(NumberFormatException e) {
+		return null;
+	  }
+	  
+	  PreparedStatement prep = con.prepareStatement("SELECT password, id FROM userData WHERE username = ?");
+	  prep.setString(1, username);
+	  return prep;
    }
    
-    private String makeTokenQuery(String userId) {
-      String query = "SELECT userKey FROM userKeys WHERE userId = "+userId+" AND providerId = "+providerId;
-      return query;
+    private PreparedStatement makeTokenQuery(int userId, Connection con) throws SQLException {
+	  PreparedStatement prep = con.prepareStatement("SELECT userKey FROM userKeys WHERE userId = ? AND providerId = ?");
+	  prep.setInt(1, userId);
+	  prep.setInt(2, providerId);
+	  return prep;
    }
    
    public static void main(String[] args) {
